@@ -5,6 +5,8 @@ using UnityEngine;
 [Serializable]
 public class ConfigData
 {
-    public Dictionary<string, float> pickupExp;
-    public Dictionary<string, float> mobKillExp;
+    public Dictionary<string, float> Pickup_Exp;
+    public Dictionary<string, float> Mob_Kill_Exp;
+    public Dictionary<string, float> Fishing_Exp;
+    public Dictionary<string, float> Tree_Harvest_Exp;
 }

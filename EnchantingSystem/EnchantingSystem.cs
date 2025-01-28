@@ -16,9 +16,9 @@ public class EnchantingSystem : Mod
 
     public static AssetBundle asset;
     public static Harmony harmony;
-    
+    public static Experience_Bar experienceBar;
+
     private ModConfig modConfig;
-    private Experience_Bar experienceBar;
     private RGD_Game_AdditionalData savedData;
 
     public IEnumerator Start()
@@ -42,6 +42,7 @@ public class EnchantingSystem : Mod
     public void OnModUnload()
     {
         asset.Unload(true);
+        harmony.UnpatchAll();
         SceneManager.sceneLoaded -= OnSceneLoaded;
         Debug.Log($"{MOD_NAME} Has Been Unloaded!");
     }
@@ -63,7 +64,7 @@ public class EnchantingSystem : Mod
     public override void WorldEvent_WorldLoaded()
     {
         experienceBar = new Experience_Bar(asset);
-        experienceBar.expBar = Instantiate(experienceBar.expBar, RAPI.GetLocalPlayer().canvas.transform);
+        Experience_Bar.expBar = Instantiate(Experience_Bar.expBar, RAPI.GetLocalPlayer().canvas.transform);
 
         savedData = LoadData();
 
@@ -82,27 +83,19 @@ public class EnchantingSystem : Mod
 
     public override void WorldEvent_WorldUnloaded()
     {
-        if (experienceBar != null && experienceBar.expBar != null)
+        if (experienceBar != null && Experience_Bar.expBar != null)
         {
             if (savedData != null)
             {
                 savedData.SaveFromExpBar(experienceBar);
                 SaveData(savedData);
             }
-            Destroy(experienceBar.expBar);
+            Destroy(Experience_Bar.expBar);
         }
     }
 
     public override void LocalPlayerEvent_PickupItem(PickupItem item)
     {
-        if (ModConfig.configData.pickupExp.TryGetValue(item.PickupName, out float exp))
-        {
-            if (!item.isDropped)
-                experienceBar.AddExperience(exp);
-            return;
-        }
-
-        RAPI.GetLocalPlayer().SendChatMessage("Config did not contain " + item.PickupName);
     }
 
     private RGD_Game_AdditionalData LoadData()
@@ -152,54 +145,30 @@ public class EnchantingSystem : Mod
         return path;
     }
 
-
-    public static void fishEscapeTest()
-    {
-        Debug.Log("FishEscapedTest");
-    }
 }
 
-/// <summary>
-/// Patches when the game mechanic for fishing and we recieve an even pull item from sea.
-/// Depending on the catch, it will deliver an amount exp adjusted by the config.
-/// </summary>
 [HarmonyPatch(typeof(FishingRod), "PullItemsFromSea")]
 class Patch_FishingRod_PullItemsFromSea
 {
-    static Dictionary<string, int> initialItems = new Dictionary<string, int>();
+    private static Dictionary<ItemInstance, int> prefixInventory = new Dictionary<ItemInstance, int>();
+    private static Dictionary<ItemInstance, int> postfixInventory = new Dictionary<ItemInstance, int>();
 
     [HarmonyPrefix]
     static void Prefix(FishingRod __instance)
     {
         try
         {
-            // Store the state of inventory before catching
             var playerNetwork = AccessTools.Field(typeof(FishingRod), "playerNetwork").GetValue(__instance) as Network_Player;
-            if (playerNetwork?.Inventory != null)
-            {
-                initialItems.Clear();
-                foreach (var slot in playerNetwork.Inventory.allSlots)
-                {
-                    if (!slot.IsEmpty && slot.itemInstance != null)
-                    {
-                        string itemName = slot.itemInstance.UniqueName;
-                        int amount = slot.GetCurrentTotalUses();
 
-                        if (initialItems.ContainsKey(itemName))
-                        {
-                            initialItems[itemName] += amount;
-                        }
-                        else
-                        {
-                            initialItems[itemName] = amount;
-                        }
-                    }
-                }
+            if (playerNetwork.Inventory != null)
+            {
+                prefixInventory.Clear();
+                ES_Tools.CreateInventorySnapshotDictionary(playerNetwork.Inventory.allSlots, prefixInventory);
             }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            Debug.Log($"Error in fishing prefix: {ex.Message}");
+            Debug.LogError($"Error in fishing prefix: {e.Message}");
         }
     }
 
@@ -208,46 +177,134 @@ class Patch_FishingRod_PullItemsFromSea
     {
         try
         {
-            // Compare inventory after catching
             var playerNetwork = AccessTools.Field(typeof(FishingRod), "playerNetwork").GetValue(__instance) as Network_Player;
-            if (playerNetwork?.Inventory != null)
+
+            if (playerNetwork.Inventory != null)
             {
-                var currentItems = new Dictionary<string, int>();
+                postfixInventory.Clear();
+                ES_Tools.CreateInventorySnapshotDictionary(playerNetwork.Inventory.allSlots, postfixInventory);
+                Dictionary<ItemInstance, int> items = ES_Tools.ItemDifferenceFromInventory(prefixInventory, postfixInventory);
 
-                // Build current inventory state
-                foreach (var slot in playerNetwork.Inventory.allSlots)
+                foreach (var (instance, quantity) in items)
                 {
-                    if (!slot.IsEmpty && slot.itemInstance != null)
-                    {
-                        string itemName = slot.itemInstance.UniqueName;
-                        int amount = slot.GetCurrentTotalUses();
-
-                        if (currentItems.ContainsKey(itemName))
-                        {
-                            currentItems[itemName] += amount;
-                        }
-                        else
-                        {
-                            currentItems[itemName] = amount;
-                        }
-                    }
-                }
-
-                // Compare quantities
-                foreach (var kvp in currentItems)
-                {
-                    int initialQuantity = initialItems.ContainsKey(kvp.Key) ? initialItems[kvp.Key] : 0;
-                    if (kvp.Value > initialQuantity)
-                    {
-                        Debug.Log($"Actually caught: {kvp.Key}");
-                        return;
-                    }
+                    Experience_Bar.AddExperienceFromItem(instance, quantity, ConfigEventType.FISHING);
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            Debug.Log($"Error in fishing postfix: {ex.Message}");
+            Debug.LogError($"Error in fishing postfix: {e.Message}");
         }
     }
 }
+
+[HarmonyPatch(typeof(HarvestableTree), "Harvest")]
+class Patch_HarvestableTree_Harvest
+{
+
+    private static Dictionary<ItemInstance, int> prefixInventory = new Dictionary<ItemInstance, int>();
+    private static Dictionary<ItemInstance, int> postfixInventory = new Dictionary<ItemInstance, int>();
+
+    [HarmonyPrefix]
+    static bool Prefix(HarvestableTree __instance, PlayerInventory playerInventory, ref bool __result)
+    {
+        try
+        {
+            if (playerInventory != null)
+            {
+                prefixInventory.Clear();
+                ES_Tools.CreateInventorySnapshotDictionary(playerInventory.allSlots, prefixInventory);
+            }
+            // Allow original method to run
+            return true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error in harvestable tree prefix: {e.Message}");
+            return true;
+        }
+    }
+
+    [HarmonyPostfix]
+    static void Postfix(HarvestableTree __instance, PlayerInventory playerInventory, bool __result)
+    {
+        try
+        {
+            if (playerInventory != null && __result) // Only if harvest was successful
+            {
+                postfixInventory.Clear();
+
+                ES_Tools.CreateInventorySnapshotDictionary(playerInventory.allSlots, postfixInventory);
+                Dictionary<ItemInstance, int> items = ES_Tools.ItemDifferenceFromInventory(prefixInventory, postfixInventory);
+
+                foreach (var (instance, quantity) in items)
+                {
+                    Experience_Bar.AddExperienceFromItem(instance, quantity, ConfigEventType.TREE_HARVEST);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error in harvestable tree postfix: {e.Message}");
+        }
+    }
+}
+
+[HarmonyPatch(typeof(Pickup), "AddItemToInventory")]
+class Patch_Pickup_AddItemToInventory
+{
+
+    private static Dictionary<ItemInstance, int> prefixInventory = new Dictionary<ItemInstance, int>();
+    private static Dictionary<ItemInstance, int> postfixInventory = new Dictionary<ItemInstance, int>();
+
+    [HarmonyPrefix]
+    static void Prefix(Pickup __instance, PickupItem item)
+    {
+        try
+        {
+            var playerInventory = AccessTools.Field(typeof(Pickup), "playerInventory").GetValue(__instance) as PlayerInventory;
+
+            if (playerInventory != null)
+            {
+                prefixInventory.Clear();
+                ES_Tools.CreateInventorySnapshotDictionary(playerInventory.allSlots, prefixInventory);
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error in pickup add item to inventory prefix: {e.Message}");
+        }
+    }
+
+    [HarmonyPostfix]
+    static void Postfix(Pickup __instance, PickupItem item)
+    {
+        try
+        {
+            var playerInventory = AccessTools.Field(typeof(Pickup), "playerInventory").GetValue(__instance) as PlayerInventory;
+
+            if (playerInventory != null)
+            {
+                postfixInventory.Clear();
+                ES_Tools.CreateInventorySnapshotDictionary(playerInventory.allSlots, postfixInventory);
+                Dictionary<ItemInstance, int> items = ES_Tools.ItemDifferenceFromInventory(prefixInventory, postfixInventory);
+
+                foreach (var (instance, quantity) in items)
+                {
+                    // NOTE: barrels and crates wont be flagged here but could use localplayerpickup
+                    if (!item.isDropped)
+                        Experience_Bar.AddExperienceFromItem(instance, quantity, ConfigEventType.PICKUP);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error in fishing postfix: {e.Message}");
+        }
+    }
+
+}
+
+// Patch for when making deals
+// Patch for when harvesting animal bodies
+// Digging ( this happens on pickup tho )

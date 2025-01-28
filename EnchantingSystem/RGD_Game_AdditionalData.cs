@@ -21,19 +21,19 @@ public class RGD_Game_AdditionalData
 
     public void SaveFromExpBar(Experience_Bar expBar)
     {
-        Debug.Log($"Saving levels: {expBar.level}, max: {expBar.maxExp}, total: {expBar.totalExp}");
-        level = expBar.level;
-        totalExp = expBar.totalExp;
-        maxExp = expBar.maxExp;
+        Debug.Log($"Saving levels: {Experience_Bar.level}, max: {Experience_Bar.maxExp}, total: {Experience_Bar.totalExp}");
+        level = Experience_Bar.level;
+        totalExp = Experience_Bar.totalExp;
+        maxExp = Experience_Bar.maxExp;
     }
 
     public void LoadIntoExpBar(Experience_Bar expBar)
     {
         Debug.Log($"Loading in levels: {level}, max: {maxExp}, total: {totalExp}");
-        expBar.level = level;
-        expBar.maxExp = maxExp;
-        expBar.totalExp = totalExp;
-        expBar.UpdatePercentage(totalExp, maxExp);
-        expBar.UpdateExpBarValue();
+        Experience_Bar.level = level;
+        Experience_Bar.maxExp = maxExp;
+        Experience_Bar.totalExp = totalExp;
+        Experience_Bar.UpdatePercentage(totalExp, maxExp);
+        Experience_Bar.UpdateExpBarValue();
     }
 }

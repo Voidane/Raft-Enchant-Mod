@@ -9,18 +9,18 @@ using Unity;
 
 public class Experience_Bar
 {
-    public GameObject expBar;
-    public Image expBackground;
-    public Slider expSlider;
-    public Image expIcon;
-    public Text expText;
+    public static GameObject expBar;
+    public static Image expBackground;
+    public static Slider expSlider;
+    public static Image expIcon;
+    public static Text expText;
 
-    public int level;
-    public double percent;
+    public static int level;
+    public static double percent;
 
-    public int minExp;
-    public int maxExp;
-    public float totalExp;
+    public static int minExp;
+    public static int maxExp;
+    public static float totalExp;
 
     public Experience_Bar(AssetBundle asset)
     {
@@ -59,7 +59,7 @@ public class Experience_Bar
         expBar.SetActive(false);
     }
 
-    public void AddExperience(float amount)
+    private static void AddExperience(float amount)
     {
         Network_Player player = RAPI.GetLocalPlayer();
         player.SendChatMessage($"{EnchantingSystem.MOD_NAME} Gained {amount} exp.");
@@ -82,16 +82,16 @@ public class Experience_Bar
         UpdateExpBarValue();
     }
 
-    public void UpdatePercentage(float total, int max) 
+    public static void UpdatePercentage(float total, int max) 
     {
         percent = Math.Round((double)(total * 100.0) / max, 2);
-        Debug.Log($"percent: {percent} from {total} * 100 / {max}");
     }
     
-    public void UpdateExpBarValue() 
+    public static void UpdateExpBarValue() 
     {
         UpdatePercentage(totalExp, maxExp);
         expText.text = $"Level: {level} ({percent}%) {totalExp}/{maxExp}";
+        expSlider.maxValue = maxExp;
         expSlider.value = totalExp;
     }
 
@@ -101,10 +101,27 @@ public class Experience_Bar
         additionalData.SaveFromExpBar(this);
     }
 
-    private void OnLevelUp()
+    private static void OnLevelUp()
     {
         Network_Player player = RAPI.GetLocalPlayer();
         player.SendChatMessage($"{EnchantingSystem.MOD_NAME} You leveled up from " + (level - 1) + " -> " + level);
     }
 
+    public static void AddExperienceFromItem(Item_Base item, int quantity, ConfigEventType _type) => CheckConfigForItem(item.UniqueName, quantity, _type);
+    public static void AddExperienceFromItem(ItemInstance item, int quantity, ConfigEventType _type) => CheckConfigForItem(item, quantity, _type);
+    public static void AddExperienceFromItem(PickupItem item, int quantity, ConfigEventType _type) => CheckConfigForItem(item.PickupName, quantity, _type);
+
+    private static void CheckConfigForItem(ItemInstance item, int quantity, ConfigEventType _type)
+    {
+        string _name = item.UniqueName.Replace(" ", "_").ToLower();
+        Debug.Log($"Alt names UnitqueName: {item.UniqueName}, Index: {item.UniqueIndex}, base name: {item.baseItem.UniqueName}, unique index: {item.baseItem.UniqueIndex} ");
+        CheckConfigForItem(_name, quantity, _type);
+    }
+
+    private static void CheckConfigForItem(string item, int quantity, ConfigEventType _type)
+    {
+        string _name = item.Replace(" ", "_").ToLower();
+        if (ModConfig.IsConfigEventType(_type, _name, quantity, out float exp))
+            AddExperience(exp);
+    }
 }

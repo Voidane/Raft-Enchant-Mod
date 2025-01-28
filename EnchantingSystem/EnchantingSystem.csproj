@@ -38,6 +38,7 @@
   <ItemGroup>
     <Compile Include="ConfigData.cs" />
     <Compile Include="EnchantingSystem.cs" />
+    <Compile Include="ES_Tools.cs" />
     <Compile Include="Experience_Bar.cs" />
     <Compile Include="ExpInterface.cs" />
     <Compile Include="ModConfig.cs" />
@@ -332,7 +333,7 @@
     <Reference Include="UnityEngine.XRModule.dll">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Raft\Raft_Data/Managed\UnityEngine.XRModule.dll</HintPath>
     </Reference>
-	<Reference Include="0Harmony.dll">
+    <Reference Include="0Harmony.dll">
       <HintPath>C:\Users\Austin\AppData\Roaming\RaftModLoader\binaries\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="coremod.dll">
