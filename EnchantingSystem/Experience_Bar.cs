@@ -30,7 +30,7 @@ public class Experience_Bar
         expIcon = expBar.transform.GetChild(2).GetComponent<Image>();
         expText = expBar.transform.GetChild(3).GetComponent<Text>();
 
-        level = 0;
+        level = 1;
         percent = 0;
         minExp = 0;
         maxExp = 100;
@@ -59,10 +59,8 @@ public class Experience_Bar
         expBar.SetActive(false);
     }
 
-    private static void AddExperience(float amount)
+    public static void AddExperience(float amount)
     {
-        Network_Player player = RAPI.GetLocalPlayer();
-        player.SendChatMessage($"{EnchantingSystem.MOD_NAME} Gained {amount} exp.");
 
         float total = totalExp + amount;
         
@@ -101,24 +99,34 @@ public class Experience_Bar
         additionalData.SaveFromExpBar(this);
     }
 
+    public static void ResetValues()
+    {
+        level = 1;
+        percent = 0;
+        minExp = 0;
+        maxExp = 100;
+        totalExp = 0;
+    }
+
     private static void OnLevelUp()
     {
         Network_Player player = RAPI.GetLocalPlayer();
         player.SendChatMessage($"{EnchantingSystem.MOD_NAME} You leveled up from " + (level - 1) + " -> " + level);
     }
 
-    public static void AddExperienceFromItem(Item_Base item, int quantity, ConfigEventType _type) => CheckConfigForItem(item.UniqueName, quantity, _type);
-    public static void AddExperienceFromItem(ItemInstance item, int quantity, ConfigEventType _type) => CheckConfigForItem(item, quantity, _type);
-    public static void AddExperienceFromItem(PickupItem item, int quantity, ConfigEventType _type) => CheckConfigForItem(item.PickupName, quantity, _type);
+    public static void AddExperienceFromItem(Item_Base item, int quantity, Dictionary<string, float> _type) => CheckConfigForItem(item.UniqueName, quantity, _type);
+    public static void AddExperienceFromItem(ItemInstance item, int quantity, Dictionary<string, float> _type) => CheckConfigForItem(item, quantity, _type);
+    public static void AddExperienceFromItem(PickupItem item, int quantity, Dictionary<string, float> _type) => CheckConfigForItem(item.PickupName, quantity, _type);
+    public static void AddExperienceFromMob(AI_NetworkBehaviourType mob, int quantity, Dictionary<string, float> _type) => CheckConfigForItem(mob.ToString(), quantity, _type);
 
-    private static void CheckConfigForItem(ItemInstance item, int quantity, ConfigEventType _type)
+    private static void CheckConfigForItem(ItemInstance item, int quantity, Dictionary<string, float> _type)
     {
         string _name = item.UniqueName.Replace(" ", "_").ToLower();
         Debug.Log($"Alt names UnitqueName: {item.UniqueName}, Index: {item.UniqueIndex}, base name: {item.baseItem.UniqueName}, unique index: {item.baseItem.UniqueIndex} ");
         CheckConfigForItem(_name, quantity, _type);
     }
 
-    private static void CheckConfigForItem(string item, int quantity, ConfigEventType _type)
+    private static void CheckConfigForItem(string item, int quantity, Dictionary<string, float> _type)
     {
         string _name = item.Replace(" ", "_").ToLower();
         if (ModConfig.IsConfigEventType(_type, _name, quantity, out float exp))
