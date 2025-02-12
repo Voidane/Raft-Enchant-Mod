@@ -5,6 +5,23 @@ using UnityEngine;
 [Serializable]
 public class ConfigData
 {
+    public static string PickupExpKey = "Pickup Exp";
+    public static string MobKillExpKey = "Mob Kill Exp";
+    public static string FishingExpKey = "Fishing Exp";
+    public static string TreeHarvestExpKey = "Tree Harvest Exp";
+    public static string CookingExpKey = "Cooking Exp";
+    public static string GrillingExpKey = "Grilling Exp";
+    public static string JuicingExpKey = "Juicing Exp";
+    public static string FarmingExpKey = "Farming Exp";
+    public static string CraftingExpKey = "Crafting Exp";
+    public static string MysteryPackageExpKey = "Mystery Package Exp";
+    public static string QuestItemsExpKey = "Quest Items Exp";
+    public static string ExtractorExpKey = "Extractor Exp";
+    public static string BeehivesExpKey = "Beehives Exp";
+    public static string SmeltingExpKey = "Smelting Exp";
+
+    public Dictionary<string, bool>[] Settings;
+
     public Dictionary<string, float> Pickup_Exp;
     public Dictionary<string, float> Mob_Kill_Exp;
     public Dictionary<string, float> Fishing_Exp;
@@ -24,6 +41,27 @@ public class ConfigData
     {
         return new ConfigData
         {
+            Settings = new Dictionary<string, bool>[]
+            {
+                new Dictionary<string, bool>
+                {
+                    { PickupExpKey, true },
+                    { MobKillExpKey, true },
+                    { FishingExpKey, true },
+                    { TreeHarvestExpKey, true },
+                    { CookingExpKey, true },
+                    { GrillingExpKey, true },
+                    { JuicingExpKey, true },
+                    { FarmingExpKey, true },
+                    { CraftingExpKey, true },
+                    { MysteryPackageExpKey, true },
+                    { QuestItemsExpKey, true },
+                    { ExtractorExpKey, true },
+                    { BeehivesExpKey, true },
+                    { SmeltingExpKey, true },
+                }
+            },
+
             Pickup_Exp = new Dictionary<string, float>
             {
                 { "leaf", 1.0F },

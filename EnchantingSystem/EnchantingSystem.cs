@@ -195,6 +195,13 @@ class Patch_FishingRod_PullItemsFromSea
     {
         try
         {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.FishingExpKey, out bool isOn))
+            {
+                if (!isOn)
+                    return;
+            }
+
+
             var playerNetwork = AccessTools.Field(typeof(FishingRod), "playerNetwork").GetValue(__instance) as Network_Player;
 
             if (playerNetwork.Inventory != null)
@@ -249,6 +256,12 @@ class Patch_HarvestableTree_Harvest
     {
         try
         {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.TreeHarvestExpKey, out bool isOn))
+            {
+                if (!isOn)
+                    return;
+            }
+
             if (playerInventory != null && __result) // Only if harvest was successful
             {
                 postfixInventory.Clear();
@@ -290,8 +303,14 @@ class Patch_Pickup_AddItemToInventory
                 {
                     Debug.Log(_name + " contains " + _term);
                     ModConfig.configData.Quest_Items_Exp.TryGetValue(_term, out float exp);
-                    RAPI.GetLocalPlayer().SendChatMessage("Quest item: " + item.pickupTerm);
-                    Experience_Bar.AddExperience(exp);
+
+                    if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.QuestItemsExpKey, out bool isOn))
+                    {
+                        if (isOn)
+                        {
+                            Experience_Bar.AddExperience(exp);
+                        }
+                    }
                 }
             }
 
@@ -327,15 +346,20 @@ class Patch_Pickup_AddItemToInventory
                 {
                     if (!item.isDropped)
                     {
-                        RAPI.GetLocalPlayer().SendChatMessage("Added: " + item.PickupName);
-                        Experience_Bar.AddExperienceFromItem(instance, quantity, ModConfig.configData.Pickup_Exp);
+                        if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.PickupExpKey, out bool isOn))
+                        {
+                            if (isOn)
+                            {
+                                Experience_Bar.AddExperienceFromItem(instance, quantity, ModConfig.configData.Pickup_Exp);
+                            }
+                        }
                     }
                 }
             }
         }
         catch (Exception e)
         {
-            Debug.LogError($"Error in fishing postfix: {e.Message}");
+            Debug.LogError($"Error in pickup postfix: {e.Message}");
         }
     }
 }
@@ -350,7 +374,14 @@ class Patch_ResourceCollector_Harvest
         RAPI.GetLocalPlayer().SendChatMessage("animal death event");
         var networkBehaviour = AccessTools.Field(typeof(AI_StateMachine_Animal), "networkBehaviour").GetValue(__instance) as AI_NetworkBehaviour_Animal;
         string _name = networkBehaviour.behaviourType.ToString().ToLower();
-        Experience_Bar.AddExperienceFromMob(networkBehaviour.behaviourType, 1, ModConfig.configData.Mob_Kill_Exp);
+
+        if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.MobKillExpKey, out bool isOn))
+        {
+            if (isOn)
+            {
+                Experience_Bar.AddExperienceFromMob(networkBehaviour.behaviourType, 1, ModConfig.configData.Mob_Kill_Exp);
+            }
+        }
     }
 }
 
@@ -368,13 +399,25 @@ class Patch_CookingTable_FoodPickup
 
         if (current_recipe.RecipeType == CookingRecipeType.CookingPot)
         {
-            Experience_Bar.AddExperienceFromItem(result, 1, ModConfig.configData.Cooking_Exp);
-            return;
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.CookingExpKey, out bool isOn))
+            {
+                if (isOn)
+                {
+                    Experience_Bar.AddExperienceFromItem(result, 1, ModConfig.configData.Cooking_Exp);
+                    return;
+                }
+            }
         }
         else if (current_recipe.RecipeType == CookingRecipeType.Juicer)
         {
-            Experience_Bar.AddExperienceFromItem(result, 1, ModConfig.configData.Juicing_Exp);
-            return;
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.JuicingExpKey, out bool isOn))
+            {
+                if (isOn)
+                {
+                    Experience_Bar.AddExperienceFromItem(result, 1, ModConfig.configData.Juicing_Exp);
+                    return;
+                }
+            }
         }
     }
 }
@@ -399,10 +442,25 @@ class Patch_CookingStand_CollectItem
         string _name = item.UniqueName.Replace(" ", "_").ToLower();
         
         if (ModConfig.configData.Grilling_Exp.ContainsKey(_name))
-            Experience_Bar.AddExperienceFromItem(item, 1, ModConfig.configData.Grilling_Exp);
+        {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.GrillingExpKey, out bool isOn))
+            {
+                if (isOn)
+                {
+                    Experience_Bar.AddExperienceFromItem(item, 1, ModConfig.configData.Grilling_Exp);
+                }
+            }
+        }
         else if (ModConfig.configData.Smelting_Exp.ContainsKey(_name))
-            Experience_Bar.AddExperienceFromItem(item, 1, ModConfig.configData.Smelting_Exp);
-
+        {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.SmeltingExpKey, out bool isOn))
+            {
+                if (isOn)
+                {
+                    Experience_Bar.AddExperienceFromItem(item, 1, ModConfig.configData.Smelting_Exp);
+                }
+            }
+        }
         return true;
     }
 }
@@ -415,7 +473,15 @@ class Patch_CraftingMenu_CraftingItem
     {
         var recpie = AccessTools.Field(typeof(CraftingMenu), "selectedRecipeBox").GetValue(__instance) as SelectedRecipeBox;
         Item_Base item = recpie.ItemToCraft;
-        RAPI.GetLocalPlayer().SendChatMessage("Crafted " + item.UniqueName);
+
+        if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.CraftingExpKey, out bool isOn))
+        {
+            if (isOn)
+            {
+                Experience_Bar.AddExperienceFromItem(item, 1, ModConfig.configData.Crafting_Exp);
+            }
+        }
+
         return true;
     }
 }
@@ -446,6 +512,12 @@ class Patch_Cropplot_PlantRemove
     {
         try
         {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.FarmingExpKey, out bool isOn))
+            {
+                if (!isOn)
+                    return;
+            }
+
             var player = AccessTools.Field(typeof(Cropplot), "localPlayer").GetValue(__instance) as Network_Player;
 
             if (player.Inventory != null)
@@ -473,9 +545,15 @@ class Patch_ItemMysteryPackage_ExtractLoot
     [HarmonyPrefix]
     static void Prefix(Cropplot __instance)
     {
-        if (ModConfig.configData.Mystery_Package_Exp.TryGetValue("all", out float exp))
+        if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.MysteryPackageExpKey, out bool isOn))
         {
-            Experience_Bar.AddExperience(exp);
+            if (isOn)
+            {
+                if (ModConfig.configData.Mystery_Package_Exp.TryGetValue("all", out float exp))
+                {
+                    Experience_Bar.AddExperience(exp);
+                }
+            }
         }
     }
 }
@@ -502,6 +580,12 @@ class Patch_PlaceableExtractor_HarvestOutput
     {
         try
         {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.ExtractorExpKey, out bool isOn))
+            {
+                if (!isOn)
+                    return;
+            }
+
             if (player.Inventory != null)
             {
                 postfixInventory.Clear();
@@ -542,6 +626,12 @@ class Patch_BeeHive_HarvestYield
     {
         try
         {
+            if (ModConfig.configData.Settings[0].TryGetValue(ConfigData.BeehivesExpKey, out bool isOn))
+            {
+                if (!isOn)
+                    return;
+            }
+
             if (player.Inventory != null)
             {
                 postfixInventory.Clear();
