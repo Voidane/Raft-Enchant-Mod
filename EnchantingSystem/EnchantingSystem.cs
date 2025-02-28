@@ -9,6 +9,7 @@ using System.IO;
 using HarmonyLib;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public class EnchantingSystem : Mod
 {
@@ -17,14 +18,27 @@ public class EnchantingSystem : Mod
     public static AssetBundle asset;
     public static Harmony harmony;
     public static Experience_Bar experienceBar;
+    public static Item_Base enchant_table_item;
 
     private ModConfig modConfig;
     private RGD_Game_AdditionalData savedData;
+    private bool delayWorldLoading;
 
-    public IEnumerator Start()
+    public static GameObject placeable_enchantment_table_gameobject;
+    public static Item_Base placeable_enchantment_table;
+
+    public async void Start()
     {
+        HNotification notification = FindObjectOfType<HNotify>().AddNotification(HNotify.NotificationType.spinning, "Loading Enchanting System...");
+        delayWorldLoading = true;
+
         AssetBundleCreateRequest request = AssetBundle.LoadFromMemoryAsync(GetEmbeddedFileBytes("enchantingsystem.assets"));
-        SceneManager.sceneLoaded += OnSceneLoaded;
+        
+        while (!request.isDone)
+            await Task.Delay(1);
+
+        asset = request.assetBundle;
+        await InitializeItems();
 
         ModDataPath();
         modConfig = new ModConfig();
@@ -32,10 +46,9 @@ public class EnchantingSystem : Mod
         harmony = new Harmony("com.voidane.enchantingsystem");
         harmony.PatchAll();
 
-        yield return request;
+        delayWorldLoading = false;
 
-        asset = request.assetBundle;
-
+        notification.Close();
         Debug.Log($"{MOD_NAME} Has been loaded.");
     }
 
@@ -43,12 +56,37 @@ public class EnchantingSystem : Mod
     {
         asset.Unload(true);
         harmony.UnpatchAll();
-        SceneManager.sceneLoaded -= OnSceneLoaded;
         Debug.Log($"{MOD_NAME} Has Been Unloaded!");
     }
 
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    [ConsoleCommand(name: "es", docs: "Gives the player an enchanting table")]
+    public static void MyCommand(string[] args)
     {
+        Debug.Log($"Item_Base [ uniqueName: {placeable_enchantment_table.UniqueName}, uniqueIndex: {placeable_enchantment_table.UniqueIndex} ]");
+        Debug.Log($"Item_Base -> usable [ anim_on_select: {placeable_enchantment_table.settings_usable.AnimationOnSelect} ]");
+        RAPI.GiveItem(ItemManager.GetItemByName("placeable_enchantment_bench"), 1);
+    }
+
+    private async Task InitializeItems()
+    {
+        placeable_enchantment_table = await asset.TaskLoadAssetAsync<Item_Base>("placeable_enchantment_bench");
+        placeable_enchantment_table_gameobject = placeable_enchantment_table.settings_buildable.GetBlockPrefab(0).gameObject;
+
+        if (placeable_enchantment_table != null && placeable_enchantment_table_gameobject != null)
+        {
+            RegisterPlaceableItem(placeable_enchantment_table, new RBlockQuadType[] { RBlockQuadType.quad_floor, RBlockQuadType.quad_foundation, RBlockQuadType.quad_table});
+        }
+    }
+
+    private void RegisterPlaceableItem(Item_Base item, RBlockQuadType[] blockType)
+    {
+        item.settings_recipe.NewCost = EnchantmentBenchObject.CostToCraft();
+        RAPI.RegisterItem(item);
+        
+        foreach (RBlockQuadType type in blockType)
+        {
+            RAPI.AddItemToBlockQuadType(item, type);
+        }
     }
 
     public override void WorldEvent_WorldSaved()
@@ -147,7 +185,6 @@ public class EnchantingSystem : Mod
 
         return path;
     }
-
 }
 
 
@@ -161,6 +198,123 @@ class Patch_Hotbar_SelectItem
             return;
 
         RAPI.GetLocalPlayer().SendChatMessage("Selcted " + item.UniqueName);
+    }
+
+
+    /**
+     * FOR DEBUGGING
+     */
+    [HarmonyPostfix]
+    static void Postfix(Hotbar __instance, Item_Base item)
+    {
+        var playerNetwork = AccessTools.Field(typeof(Hotbar), "playerNetwork").GetValue(__instance) as Network_Player;
+
+        if (playerNetwork.PlayerItemManager == null)
+            Debug.Log("Player item manager was null");
+        else
+            Debug.Log("Player item manager was not null");
+
+        if (item == null)
+        {
+            Debug.Log("The item was null");
+        }
+        else if (!item.settings_usable.IsUsable())
+            Debug.Log("The item was not usable");
+
+        if (item == null || !item.settings_usable.IsUsable())
+        {
+            Debug.Log("this.playerNetwork.PlayerItemManager.SelectUsable(null);");
+            return;
+        }
+        Debug.Log("this.playerNetwork.PlayerItemManager.SelectUsable(item)");
+    }
+}
+
+/**
+ * DEBUGGING
+**/
+[HarmonyPatch(typeof(PlayerItemManager), "SelectUsable")]
+class Patch_PlayerItemManager_SelectUsable
+{
+    [HarmonyPostfix]
+    static void Postfix(PlayerItemManager __instance, Item_Base item)
+    {
+        var playerNetwork = AccessTools.Field(typeof(PlayerItemManager), "playerNetwork").GetValue(__instance) as Network_Player;
+
+        if (playerNetwork.IsLocalPlayer)
+        {
+            Debug.Log("[PlayerItemManager : SelectUsable] Player is local");
+            if (item != null)
+            {
+                Debug.Log("[PlayerItemManager : SelectUsable] Item was not null");
+            }
+            else
+            {
+                Debug.LogError("[PlayerItemManager : SelectUsable] Item was null");
+            }
+        }
+        else
+        {
+            Debug.LogError("[PlayerItemManager : SelectUsable] Player is not local");
+        }
+
+        
+    }
+}
+
+/**
+[HarmonyPatch(typeof(BlockCreator), "Update")]
+class Patch_BlockCreator_Update
+{
+    [HarmonyPrefix]
+    static void Prefix(BlockCreator __instance)
+    {
+        Debug.Log("PREFIX DEBUGGER WORKED");
+
+        var selectedBuildableItem = AccessTools.Field(typeof(BlockCreator), "selectedBuildableItem").GetValue(__instance) as Item_Base;
+        var quadSurface = AccessTools.Field(typeof(BlockCreator), "selectedBlock").GetValue(__instance) as Block;
+    }
+}
+**/
+
+/**
+[HarmonyPatch(typeof(BlockQuad), "AcceptsBlock")]
+class Patch_BlockQuad_AcceptsBlock
+{
+    [HarmonyPrefix]
+    static void Prefix(BlockQuad __instance, Item_Base blockItem, Vector3 surfaceNormal)
+    {
+        var quadType = AccessTools.Field(typeof(BlockQuad), "quadType").GetValue(__instance) as SO_BlockQuadType;
+
+        if (quadType.AcceptsBlock(blockItem))
+        {
+            Debug.Log("quadType was accepted");
+        }
+        else
+        {
+            Debug.Log("quadType was not accepted");
+        }
+    }
+}
+**/
+
+// This works but could be intensive
+[HarmonyPatch(typeof(SO_BlockQuadType), "AcceptsBlock")]
+class Patch_SO_BlockQuadType_AcceptsBlock
+{
+
+    static List<Item_Base> acceptableBlockTypes = null;
+
+    [HarmonyPrefix]
+    static void Prefix(SO_BlockQuadType __instance, Item_Base block)
+    {
+        acceptableBlockTypes = AccessTools.Field(typeof(SO_BlockQuadType), "acceptableBlockTypes").GetValue(__instance) as List<Item_Base>;
+
+        if (!acceptableBlockTypes.Contains(EnchantingSystem.placeable_enchantment_table))
+        {
+            Debug.Log("Added enchant to the itembase list now");
+            acceptableBlockTypes.Add(EnchantingSystem.placeable_enchantment_table);
+        }
     }
 }
 
@@ -483,6 +637,24 @@ class Patch_CraftingMenu_CraftingItem
         }
 
         return true;
+    }
+
+    /**
+     * TODO : REMOVE (DEBUGGING)
+     */
+    [HarmonyPostfix]
+    static void Postfix(CraftingMenu __instance)
+    {
+        var itemToCraft = AccessTools.Field(typeof(CraftingMenu), "selectedRecipeBox").GetValue(__instance) as SelectedRecipeBox;
+        
+        if (itemToCraft.ItemToCraft == null)
+        {
+            Debug.Log("Item was null");
+        }
+        else
+        {
+            Debug.Log($"Crafting: {itemToCraft.ItemToCraft}, Total: {itemToCraft.ItemToCraft.settings_recipe.AmountToCraft}");
+        }
     }
 }
 

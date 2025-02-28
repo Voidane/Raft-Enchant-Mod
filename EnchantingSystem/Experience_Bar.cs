@@ -61,20 +61,25 @@ public class Experience_Bar
 
     public static void AddExperience(float amount)
     {
+        float remainingExp = amount;
 
-        float total = totalExp + amount;
-        
-        if (total >= maxExp)
+        while (remainingExp > 0)
         {
-            float rest = total - maxExp;
-            maxExp = (int) (maxExp * 1.25);
-            totalExp = rest;
-            level++;
-            OnLevelUp();
-        }
-        else
-        {
-            totalExp = totalExp + amount;
+            float expToNextLevel = maxExp - totalExp;
+
+            if (remainingExp >= expToNextLevel)
+            {
+                remainingExp -= expToNextLevel;
+                totalExp = 0;
+                level++;
+                maxExp = (int)(maxExp * 1.25f);
+                OnLevelUp();
+            }
+            else
+            {
+                totalExp += remainingExp;
+                remainingExp = 0;
+            }
         }
 
         UpdateExpBarValue();
@@ -89,6 +94,7 @@ public class Experience_Bar
     {
         UpdatePercentage(totalExp, maxExp);
         expText.text = $"Level: {level} ({percent}%) {totalExp}/{maxExp}";
+        Debug.Log(expText.text);
         expSlider.maxValue = maxExp;
         expSlider.value = totalExp;
     }
