@@ -10,6 +10,10 @@ using HarmonyLib;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using UnityEngine.UI;
+using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
+using System.Reflection;
 
 public class EnchantingSystem : Mod
 {
@@ -19,13 +23,11 @@ public class EnchantingSystem : Mod
     public static Harmony harmony;
     public static Experience_Bar experienceBar;
     public static Item_Base enchant_table_item;
-
     private ModConfig modConfig;
     private RGD_Game_AdditionalData savedData;
-    private bool delayWorldLoading;
-
     public static GameObject placeable_enchantment_table_gameobject;
     public static Item_Base placeable_enchantment_table;
+    public CanvasHelper canvas;
 
     public async void Start()
     {
@@ -44,7 +46,7 @@ public class EnchantingSystem : Mod
         modConfig = new ModConfig();
         
         harmony = new Harmony("com.voidane.enchantingsystem");
-        harmony.PatchAll();
+        harmony.PatchAll(Assembly.GetExecutingAssembly());
 
         delayWorldLoading = false;
 
@@ -57,6 +59,7 @@ public class EnchantingSystem : Mod
         asset.Unload(true);
         harmony.UnpatchAll();
         Debug.Log($"{MOD_NAME} Has Been Unloaded!");
+        Destroy(gameObject);
     }
 
     [ConsoleCommand(name: "es", docs: "Gives the player an enchanting table")]
@@ -67,10 +70,107 @@ public class EnchantingSystem : Mod
         RAPI.GiveItem(ItemManager.GetItemByName("placeable_enchantment_bench"), 1);
     }
 
+    [ConsoleCommand(name: "esrn", docs: "Duplicates the item with a test description enchant")]
+    public static void esrn(string[] args)
+    {
+        PlayerInventory playerInventory = RAPI.GetLocalPlayer().Inventory;
+        ItemInstance item = RAPI.GetLocalPlayer().Inventory.GetSelectedHotbarItem();
+        var data = item.GetAdditionalData();
+
+        // Add the enchant to the item here
+
+        playerInventory.AddItem(item, true);
+    }
+
+    [ConsoleCommand(name: "addenchant", docs: "Adds an enchant to the selected item. Usage: addenchant [enchant name]")]
+    public static void AddEnchant(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Debug.Log("Usage: addenchant [enchant name]");
+            return;
+        }
+
+        string enchantName = string.Join(" ", args);
+        ItemInstance item = RAPI.GetLocalPlayer().Inventory.GetSelectedHotbarItem();
+
+        if (item == null)
+        {
+            Debug.Log("No item selected in hotbar");
+            return;
+        }
+
+        var data = item.GetAdditionalData();
+        data.enchants.Add(enchantName);
+
+        Debug.Log($"Added '{enchantName}' to {item.UniqueName}. Total enchants: {data.enchants.Count}");
+    }
+
+    [ConsoleCommand(name: "listenchants", docs: "Lists all enchants on the selected item")]
+    public static void ListEnchants(string[] args)
+    {
+        ItemInstance item = RAPI.GetLocalPlayer().Inventory.GetSelectedHotbarItem();
+
+        if (item == null)
+        {
+            Debug.Log("No item selected in hotbar");
+            return;
+        }
+
+        var data = item.GetAdditionalData();
+
+        if (data.enchants.Count == 0)
+        {
+            Debug.Log($"Item {item.UniqueName} has no enchants");
+            return;
+        }
+
+        Debug.Log($"Enchants on {item.UniqueName}:");
+        for (int i = 0; i < data.enchants.Count; i++)
+        {
+            Debug.Log($"  {i + 1}. {data.enchants[i]}");
+        }
+    }
+
+    [ConsoleCommand(name: "removeenchant", docs: "Removes an enchant by index from the selected item. Usage: removeenchant [index]")]
+    public static void RemoveEnchant(string[] args)
+    {
+        if (args.Length < 1 || !int.TryParse(args[0], out int index))
+        {
+            Debug.Log("Usage: removeenchant [index]");
+            return;
+        }
+
+        ItemInstance item = RAPI.GetLocalPlayer().Inventory.GetSelectedHotbarItem();
+
+        if (item == null)
+        {
+            Debug.Log("No item selected in hotbar");
+            return;
+        }
+
+        var data = item.GetAdditionalData();
+
+        // Convert from 1-based to 0-based index
+        index--;
+
+        if (index < 0 || index >= data.enchants.Count)
+        {
+            Debug.Log($"Invalid enchant index. Valid range: 1-{data.enchants.Count}");
+            return;
+        }
+
+        string removedEnchant = data.enchants[index];
+        data.enchants.RemoveAt(index);
+
+        Debug.Log($"Removed enchant '{removedEnchant}' from {item.UniqueName}");
+    }
+
     private async Task InitializeItems()
     {
         placeable_enchantment_table = await asset.TaskLoadAssetAsync<Item_Base>("placeable_enchantment_bench");
         placeable_enchantment_table_gameobject = placeable_enchantment_table.settings_buildable.GetBlockPrefab(0).gameObject;
+        placeable_enchantment_table_gameobject.AddComponent<EnchantmentBenchObject>();
 
         if (placeable_enchantment_table != null && placeable_enchantment_table_gameobject != null)
         {
@@ -118,6 +218,20 @@ public class EnchantingSystem : Mod
             Debug.Log("A fresh new start on save data");
             savedData = new RGD_Game_AdditionalData();
         }
+
+        this.canvas = ComponentManager<CanvasHelper>.Value;
+        Transform inventoryParent = this.canvas.transform.Find("InventoryParent");
+        Transform inventory_Player = inventoryParent.Find("Inventory_Player");
+        Transform descriptionBox = inventory_Player.Find("DescriptionBox");
+
+        Text description = descriptionBox.Find("ItemDescriptionText").GetComponent<Text>();
+        Transform imageAndDisplayName = descriptionBox.Find("Image and displayname");
+        Text name = imageAndDisplayName.Find("ItemNameText").GetComponent<Text>();
+
+        description.supportRichText = true;
+        name.supportRichText = true;
+
+        Debug.Log("Changed rich text to true");
 
         experienceBar.Resetup();
     }
@@ -820,6 +934,248 @@ class Patch_BeeHive_HarvestYield
         catch (Exception e)
         {
             Debug.LogError($"Error in farming postfix: {e.Message}");
+        }
+    }
+}
+
+[Serializable]
+public class ItemInstanceAdditionalData
+{
+    public List<string> enchants;
+
+    public ItemInstanceAdditionalData()
+    {
+        enchants = new List<string>();
+    }
+}
+
+public static class ItemInstanceExtension
+{
+    private static readonly ConditionalWeakTable<ItemInstance, ItemInstanceAdditionalData> data =
+        new ConditionalWeakTable<ItemInstance, ItemInstanceAdditionalData>();
+
+    public static readonly ConditionalWeakTable<RGD_ItemInstance, ItemInstanceAdditionalData> RGD_data =
+        new ConditionalWeakTable<RGD_ItemInstance, ItemInstanceAdditionalData>();
+
+    public static ItemInstanceAdditionalData GetAdditionalData(this ItemInstance itemInstance)
+    {
+        return data.GetOrCreateValue(itemInstance);
+    }
+
+    public static void AddData(this ItemInstance itemInstance, ItemInstanceAdditionalData value)
+    {
+        try
+        {
+            data.Add(itemInstance, value);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Could not add data to ItemInstance: {ex.Message}");
+        }
+    }
+
+    public static void AddData(this RGD_ItemInstance rgdItemInstance, ItemInstanceAdditionalData value)
+    {
+        try
+        {
+            RGD_data.Add(rgdItemInstance, value);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Could not add data to RGD_ItemInstance: {ex.Message}");
+        }
+    }
+
+    // Added method to see if we have enchant data
+    public static bool HasData(this ItemInstance itemInstance)
+    {
+        ItemInstanceAdditionalData result;
+        return data.TryGetValue(itemInstance, out result);
+    }
+
+    // Added method to see if RGD instance has enchant data
+    public static bool HasData(this RGD_ItemInstance rgdItemInstance)
+    {
+        ItemInstanceAdditionalData result;
+        return RGD_data.TryGetValue(rgdItemInstance, out result);
+    }
+}
+
+class ItemInstancePatch
+{
+    // Patch the Clone method to transfer enchantments when cloning items
+    [HarmonyPatch(typeof(ItemInstance), "Clone")]
+    class ClonePatch
+    {
+        private static void Postfix(ItemInstance __instance, ref ItemInstance __result)
+        {
+            try
+            {
+                if (__instance == null || __result == null) return;
+
+                var data = __instance.GetAdditionalData();
+                if (data.enchants.Count > 0)
+                {
+                    __result.AddData(data);
+                    Debug.Log($"Cloned {data.enchants.Count} enchants from {__instance.UniqueName} to {__result.UniqueName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error in Clone patch: {ex.Message}");
+            }
+        }
+    }
+
+    // Patch the constructor to handle data transfer when creating items
+    [HarmonyPatch(typeof(ItemInstance), MethodType.Constructor, new Type[] { typeof(Item_Base), typeof(int), typeof(int), typeof(string) })]
+    class ItemInstanceConstructorPatch
+    {
+        private static void Postfix(ItemInstance __instance, Item_Base itemBase, int amount, int uses, string exclusiveString)
+        {
+            // We need to identify if this constructor was called from RGD_ItemInstance.GetRealInstance
+            // This is tricky, but we can use the call stack to check
+            try
+            {
+                var stackTrace = new System.Diagnostics.StackTrace();
+                var frames = stackTrace.GetFrames();
+
+                bool calledFromGetRealInstance = false;
+                foreach (var frame in frames)
+                {
+                    var method = frame.GetMethod();
+                    if (method.Name == "GetRealInstance" && method.DeclaringType == typeof(RGD_ItemInstance))
+                    {
+                        calledFromGetRealInstance = true;
+                        break;
+                    }
+                }
+
+                if (calledFromGetRealInstance)
+                {
+                    Debug.Log($"ItemInstance constructor called from GetRealInstance for {__instance.UniqueName}");
+                    // The data transfer will be handled in the RGD_ItemInstance.GetRealInstance patch
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error in ItemInstance constructor patch: {ex.Message}");
+            }
+        }
+    }
+}
+
+
+class RGD_ItemInstancePatch
+{
+    // When saving: ItemInstance -> RGD_ItemInstance
+    [HarmonyPatch(typeof(RGD_ItemInstance), MethodType.Constructor, new Type[] { typeof(ItemInstance) })]
+    class RGD_ItemInstanceConstructor
+    {
+        private static void Postfix(RGD_ItemInstance __instance, ItemInstance instance)
+        {
+            try
+            {
+                if (instance == null)
+                {
+                    Debug.LogWarning("ItemInstance is null in RGD_ItemInstance constructor");
+                    return;
+                }
+
+                var additionalData = instance.GetAdditionalData();
+                if (additionalData.enchants.Count > 0)
+                {
+                    __instance.AddData(additionalData);
+                    Debug.Log($"Saved {additionalData.enchants.Count} enchants for item {instance.UniqueName} during save");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error in RGD_ItemInstanceConstructor patch: {ex.Message}");
+            }
+        }
+    }
+
+    // When loading: RGD_ItemInstance -> ItemInstance
+    [HarmonyPatch(typeof(RGD_ItemInstance), "GetRealInstance")]
+    class GetRealInstancePatch
+    {
+        private static void Postfix(RGD_ItemInstance __instance, ref ItemInstance __result)
+        {
+            try
+            {
+                if (__result == null) return;
+
+                ItemInstanceAdditionalData rgdData;
+                if (ItemInstanceExtension.RGD_data.TryGetValue(__instance, out rgdData) && rgdData.enchants.Count > 0)
+                {
+                    __result.AddData(rgdData);
+                    Debug.Log($"Transferred {rgdData.enchants.Count} enchants to ItemInstance {__result.UniqueName} during load");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error in GetRealInstance patch: {ex.Message}");
+            }
+        }
+    }
+
+    // When loading from save file: Deserializing into RGD_ItemInstance
+    [HarmonyPatch(typeof(RGD_ItemInstance), MethodType.Constructor, new Type[] { typeof(SerializationInfo), typeof(StreamingContext) })]
+    class RGD_ItemInstanceDeserializeConstructor
+    {
+        private static void Postfix(RGD_ItemInstance __instance, SerializationInfo info)
+        {
+            try
+            {
+                string additionalData = null;
+
+                // First try to get our data with the specific key
+                try { additionalData = info.GetString("EnchantData"); } catch { }
+
+                // If that fails, try the generic key (to support old saves)
+                if (additionalData == null)
+                {
+                    try { additionalData = info.GetString("AdditionalData"); } catch { }
+                }
+
+                if (!string.IsNullOrEmpty(additionalData))
+                {
+                    var data = JsonUtility.FromJson<ItemInstanceAdditionalData>(additionalData);
+                    if (data != null && data.enchants.Count > 0)
+                    {
+                        __instance.AddData(data);
+                        Debug.Log($"Loaded {data.enchants.Count} enchants for item from save file");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error loading enchants from save: {ex.Message}");
+            }
+        }
+    }
+
+    // When saving to save file: Serializing RGD_ItemInstance
+    [HarmonyPatch(typeof(RGD_ItemInstance), "GetObjectData")]
+    class GetObjectDataPatch
+    {
+        private static void Postfix(RGD_ItemInstance __instance, SerializationInfo info)
+        {
+            try
+            {
+                ItemInstanceAdditionalData value;
+                if (ItemInstanceExtension.RGD_data.TryGetValue(__instance, out value) && value.enchants.Count > 0)
+                {
+                    string jsonData = JsonUtility.ToJson(value);
+                    info.AddValue("EnchantData", jsonData);
+                    Debug.Log($"Saved {value.enchants.Count} enchants to save file");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Error saving enchants: {ex.Message}");
+            }
         }
     }
 }
