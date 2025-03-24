@@ -39,6 +39,7 @@
     <Compile Include="ConfigData.cs" />
     <Compile Include="EnchantingSystem.cs" />
     <Compile Include="EnchantmentBenchObject.cs" />
+    <Compile Include="EnchantmentMenu_Inventory.cs" />
     <Compile Include="ES_Tools.cs" />
     <Compile Include="Experience_Bar.cs" />
     <Compile Include="ExpInterface.cs" />

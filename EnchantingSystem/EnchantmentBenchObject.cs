@@ -1,4 +1,5 @@
-﻿using System;
+﻿using HMLLibrary;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -23,6 +24,7 @@ public class EnchantmentBenchObject : MonoBehaviour_ID_Network, IRaycastable
             if (MyInput.GetButtonDown("Inventory") || MyInput.GetButtonDown("Cancel"))
             {
                 Debug.Log("CANCEL");
+                EnchantingSystem.enchantment_menu.SetActive(false);
                 PlayerItemManager.IsBusy = false;
                 this.isOpen = false;
             }
@@ -73,10 +75,15 @@ public class EnchantmentBenchObject : MonoBehaviour_ID_Network, IRaycastable
 
             if (MyInput.GetButtonDown("Interact"))
             {
+                Debug.Log("E pressed, showing table");
                 this.canvas.displayTextManager.HideDisplayTexts();
-
-                // TODO: Load Asset Menu for enchant table
                 this.canvas.OpenMenuCloseOther(MenuType.Inventory, false);
+
+                if (EnchantingSystem.enchantment_menu == null)
+                    EnchantingSystem.enchantment_menu = await EnchantingSystem.CreateEnchantMenu();
+
+                EnchantingSystem.enchantment_menu.SetActive(true);
+
                 PlayerItemManager.IsBusy = true;
                 this.isOpen = true;
                 base.CancelInvoke("AllowCloseWithUseButton");
